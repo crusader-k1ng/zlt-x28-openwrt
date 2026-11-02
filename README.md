@@ -7,7 +7,7 @@
 
 # X28 OpenWrt
 
-**A native OpenWrt 23.05 for the ZLT X28 5G CPE: recovery-first, built in the open, running on a real unit.**
+**A native OpenWrt 23.05 for the ZLT X28 5G CPE, with WireGuard, OpenVPN, L2TP, PPTP and Passwall2 built in: recovery-first, built in the open, running on a real unit.**
 
 [![Release](https://img.shields.io/github/v/release/mralinp/zlt-x28-openwrt?include_prereleases&label=release)](https://github.com/mralinp/zlt-x28-openwrt/releases)
 [![Release workflow](https://github.com/mralinp/zlt-x28-openwrt/actions/workflows/release.yml/badge.svg)](https://github.com/mralinp/zlt-x28-openwrt/actions/workflows/release.yml)
@@ -17,7 +17,7 @@
 ![Status](https://img.shields.io/badge/status-beta%20%C2%B7%20pre--release-yellow)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-[Status](#status) · [Roadmap](#roadmap-to-a-stable-release) · [How it works](#how-it-works) · [Build](#build-and-flash-overview) · [Changelog](CHANGELOG.md) · [Tests](docs/TESTING.md) · [Docs](docs/README.md) · [Contributing](#contributing)
+[Status](#status) · [VPN and Passwall2](#vpn-and-passwall2) · [Roadmap](#roadmap-to-a-stable-release) · [How it works](#how-it-works) · [Build](#build-and-flash-overview) · [Changelog](CHANGELOG.md) · [Tests](docs/TESTING.md) · [Docs](docs/README.md) · [Contributing](#contributing)
 
 </div>
 
@@ -31,13 +31,13 @@
 ## Why
 
 The ZLT X28 (MediaTek MT6890/T750, Quectel RG500L modem) ships a locked-down OpenWrt 19.07 with a vendor web
-UI. This project puts a **normal OpenWrt** on it: stock LuCI and UCI, netifd, standard DHCP and firewall, a
-cooler box, and local SMS/voice for AI projects, **without losing the ability to recover the unit**. So it goes
+UI. This project puts a **normal OpenWrt** on it: stock LuCI and UCI, netifd, standard DHCP and firewall,
+**VPN clients and Passwall2 that work on the vendor kernel**, a cooler box, and local SMS/voice for AI projects, **without losing the ability to recover the unit**. So it goes
 recovery first: back up everything, prove a way back, then build and flash.
 
 ## Status
 
-Last updated 2026-10-29 (release `v0.22.0`). One unit, one SIM, one carrier.
+Last updated 2026-11-02 (release `v0.37.0`). One unit, one SIM, one carrier.
 
 | Area | State |
 |---|---|
@@ -45,8 +45,12 @@ Last updated 2026-10-29 (release `v0.22.0`). One unit, one SIM, one carrier.
 | USB recovery: preloader + download agent | ✅ all 51 partitions read over USB; `rootfs_a` and `rootfs_sig_a` written and restored with guarded tools |
 | Native OpenWrt 23.05.5 on slot A (vendor 4.19.205 kernel, fw3 + iptables-legacy) | ✅ boots; stock slot B untouched |
 | 5G data as a normal netifd interface (`x28_mipc`: IPv4, IPv6, IPv4v6, APN from the SIM) | ✅ works, with its own LuCI protocol page |
-| LuCI, LAN bridge (4 sockets), DHCP/DNS, IPv6 on the LAN, firewall and NAT | ✅ works; root has an empty password until you set one |
-| Wi-Fi (MT7915 dual band, vendor `mt_wifi` through a netifd handler) | 🟡 both radios come up with WPA2; client and throughput tests pending |
+| LuCI over HTTPS (self-signed, HTTP redirected), LAN bridge (4 sockets), DHCP/DNS, IPv6 on the LAN, firewall and NAT | ✅ works; root has an empty password until you set one |
+| WireGuard (our module for the vendor kernel) | ✅ up to 715 Mbit/s sending, CPU not saturated ([below](#vpn-and-passwall2)) |
+| OpenVPN client | ✅ about 100 Mbit/s, one CPU core is the limit |
+| L2TP and PPTP clients | 🟡 installed, protocols in netifd and LuCI; not yet tested against a server |
+| Passwall2 (xray, TPROXY modules we build) | ✅ whole LAN through the node: TCP, UDP and IPv6, switched from LuCI, survives a reboot |
+| Wi-Fi (MT7915 dual band, vendor `mt_wifi` through a netifd handler) | 🟡 both radios come up with WPA2 and a phone works through them; throughput tests pending |
 | Front panel LEDs (radio, signal, WAN) | ✅ works |
 | Everything at boot, settings surviving reboots, SSH key-only on port 22 | ✅ works |
 | A/B boot counter | ✅ the preloader adds a try per boot; `x28-bootok` resets it after a good boot, like stock |
@@ -58,6 +62,44 @@ Last updated 2026-10-29 (release `v0.22.0`). One unit, one SIM, one carrier.
 Every ✅ links to evidence and a reproduce command in **[docs/TESTING.md](docs/TESTING.md)**. The vendor modem
 stack is closed-source and not redistributable, so what this repository publishes is the **build tooling and the
 packages**, not a ready-to-flash image: the image is assembled locally from your own unit's backup.
+
+## VPN and Passwall2
+
+These were the main reasons to replace the stock firmware. The image ships all of them preinstalled, configured from
+stock LuCI pages:
+
+| | How it runs on the vendor 4.19.205 kernel |
+|---|---|
+| **WireGuard** | The kernel has none. We build `wireguard-linux-compat` against the kernel tree ([`package/x28-kmods`](package/x28-kmods/README.md)) and load it after a good boot, with a crash guard ([#227](https://github.com/mralinp/zlt-x28-openwrt/issues/227)) |
+| **OpenVPN** | `openvpn-openssl` and `luci-app-openvpn`, `tun` from the stock kernel |
+| **L2TP, PPTP** | `xl2tpd` and `ppp-mod-pptp` as LuCI interfaces |
+| **Passwall2** | xray on the iptables path (no nftables here), with TPROXY and socket modules we build, plus a small shim for two symbols the kernel never exported ([PASSWALL2](docs/PASSWALL2.md)) |
+
+![Passwall2 running in LuCI on the X28](docs/images/x28-passwall2-luci.png)
+
+What the X28 can carry with this firmware, measured on the unit on 2026-11-02 ([TESTING 37](docs/TESTING.md#37-vpn-speed-and-cpu-limits-on-the-router-2026-11-02),
+[PASSWALL2](docs/PASSWALL2.md#what-the-device-can-carry)). WireGuard and OpenVPN ran `iperf3` between the router and a LAN
+peer, so the carrier and the far server are out of the picture:
+
+| Tunnel | Router sends | Router receives | CPU (4 cores) | What limits it |
+|---|---|---|---|---|
+| None (reference) | 856 Mbit/s | 363 Mbit/s | 9–36% | the test laptop's path |
+| WireGuard, 4 streams | 715 Mbit/s | 330 Mbit/s | 55–58% | not reached |
+| OpenVPN AES-128-GCM (mbed TLS) | 102 Mbit/s | 58 Mbit/s | 24–27% | one core |
+| OpenVPN AES-256-GCM (OpenSSL, the shipped build) | 74 Mbit/s | 84 Mbit/s | 25–27% | one core |
+| Passwall2 / xray | | about 400 Mbit/s, estimated | 0.45 cores per 100 Mbit/s | CPU |
+
+**Pushing it further** ([details](docs/PASSWALL2.md#pushing-it-further)):
+
+- **WireGuard** for raw speed: it runs in the kernel on all four cores and had headroom at 715 Mbit/s.
+- **OpenVPN** is single-threaded at about 100 Mbit/s per tunnel: use UDP and AES-GCM, or split traffic across tunnels.
+- **Passwall2** scales with streams and cores: pick a light transport (fewer layers than XHTTP over TLS), keep logs at
+  `warn`, and try packet steering, since `cpu0` takes all network interrupts.
+- **Heat** is not the limit so far: the SoC idles about 40 °C on this firmware and stayed under 48 °C in these tests.
+  A fan or the `performance` CPU governor buys more for sustained loads.
+
+Not yet measured: LAN clients forwarded through each tunnel, L2TP and PPTP against a server, the Passwall2 ceiling
+itself, the tuning ideas, and WireGuard over hours.
 
 ## Roadmap to a stable release
 
@@ -102,7 +144,8 @@ flowchart LR
 - **Vendor half stays local.** The stock kernel modules and vendor binaries are proprietary and specific to a
   firmware build, so they are taken from **your own unit's backup** and never enter this public repo or CI.
 - **Our packages** (`package/`): `x28-mipc` (cellular netifd protocol) with its LuCI page, `x28-modem` (starts the
-  vendor modem stack), `x28-wifi`, `x28-leds` and `x28-bootok` (A/B boot counter).
+  vendor modem stack), `x28-wifi`, `x28-leds`, `x28-bootok` (A/B boot counter) and `x28-kmods` (WireGuard and TPROXY
+  modules for the vendor kernel: sources here, built locally against the kernel tree, loaded after a good boot).
 - **Guarded flashing.** The tools in `tools/recovery/` write only the targets they were built for, check the other
   slot and neighbouring partitions before and after every write, and need a typed phrase from the owner.
 
