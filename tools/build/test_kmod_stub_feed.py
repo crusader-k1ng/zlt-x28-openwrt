@@ -36,6 +36,11 @@ class Covered(unittest.TestCase):
                  'kmod-dependent': kmod([], ['kmod-ipt-ipset'])}
         self.assertEqual(f.covered(kmods, {'ip_set'}), [])
 
+    def test_named_dependency_can_be_skipped(self):
+        kmods = {'kmod-crypto-arc4': kmod(['arc4'], ['kmod-crypto-user']), 'kmod-crypto-user': kmod(['af_alg']),
+                 'kmod-mppe': kmod(['ppp_mppe'], ['kmod-crypto-arc4'])}
+        self.assertEqual(f.covered(kmods, {'arc4', 'ppp_mppe'}), ['kmod-crypto-arc4', 'kmod-mppe'])
+
     def test_dependency_cycle_ends(self):
         kmods = {'kmod-a': kmod(['a'], ['kmod-b']), 'kmod-b': kmod(['b'], ['kmod-a'])}
         self.assertEqual(f.covered(kmods, {'a', 'b'}), ['kmod-a', 'kmod-b'])

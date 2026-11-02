@@ -37,9 +37,10 @@ STORAGE = Path(__file__).resolve().parents[2]/'package/x28-storage/files'
 # ubi-utils for attaching user_data (#183); its writers have no business on a router that must not touch other slots.
 UBI_WRITERS = tuple('usr/sbin/'+n for n in ('ubidetach','ubiformat','ubimkvol','ubirmvol','ubirsvol','ubiupdatevol','ubirename','ubiblock','ubinize','mtdinfo','ubicrc32'))
 MODEM = Path(__file__).resolve().parents[2]/'package/x28-modem/files'
+WIREGUARD = Path(__file__).resolve().parents[2]/'package/x28-wireguard/files'
 FEED_KEY = Path(__file__).resolve().parents[2]/'package/x28-feed/files/x28-feed.pub'
 FEED_KEY_ID = '7fec994ab0d15b97'
-FEED_LINE = 'src/gz x28 https://github.com/mralinp/zlt-x28-openwrt/releases/download/feed-1\n'
+FEED_LINE = 'src/gz x28 https://github.com/mralinp/zlt-x28-openwrt/releases/download/feed-2\n'
 KERNEL_VERSION = '1:4.19.205-x28'
 # mt_wifi reads these at interface up; the mtwifi handler rewrites only its keys in them (#127).
 # Stock LuCI 23.05 offers WPA only for mac80211/broadcom radios; add the modes the mtwifi handler maps (#127).
@@ -253,7 +254,7 @@ def public_key(text):
     return fields[0]+' '+fields[1]+'\n'
 
 
-def integrate(stage,key,stock_path,output):
+def integrate(stage,key,stock_path,output,wireguard_module=None):
     key=public_key(key)
     if output.exists():raise FileExistsError(output)
     manifest=json.loads((stage/'manifest.json').read_text());raw=(stage/'rootfs-staging.tar.gz').read_bytes()
@@ -382,6 +383,15 @@ config dhcp 'wan'
         put('usr/lib/opkg/status','\n\n'.join(kept+[record]))
         put('usr/lib/opkg/info/kernel.control',record.replace('Status: install user installed\n',''))
         put('usr/lib/opkg/info/kernel.list','')
+    enable(90,'openvpn')  # starts only the tunnels enabled in its config
+    if wireguard_module:  # built against the private SDK tree, so it comes from the local build, never from the repo (#227)
+        module=Path(wireguard_module).read_bytes()
+        info=tarfile.TarInfo('lib/modules/4.19.205/wireguard.ko');info.mode=0o644;info.uid=info.gid=0;info.size=len(module);tree[info.name]=(info,module)
+        put('etc/init.d/x28-wireguard',(WIREGUARD/'x28-wireguard.init').read_text(),0o755);enable(97,'x28-wireguard')
+        record=f'Package: kmod-wireguard\nVersion: {KERNEL_VERSION}\nDepends: kernel (= {KERNEL_VERSION})\nArchitecture: aarch64_generic\n'
+        put('usr/lib/opkg/status',tree['usr/lib/opkg/status'][1].decode().rstrip('\n')+'\n\n'+record+'Status: install user installed\n')
+        put('usr/lib/opkg/info/kmod-wireguard.control',record)
+        put('usr/lib/opkg/info/kmod-wireguard.list','/lib/modules/4.19.205/wireguard.ko\n/etc/init.d/x28-wireguard\n')
     put('etc/opkg/keys/'+FEED_KEY_ID,FEED_KEY.read_text())
     put('etc/opkg/customfeeds.conf',(tree['etc/opkg/customfeeds.conf'][1].decode() if 'etc/opkg/customfeeds.conf' in tree else '')+FEED_LINE)
     # Physical console only (kernel console=ttyS0,921600): needs the board's UART pads, unlike SSH. This is the single
@@ -449,7 +459,8 @@ config interface 'wan'
 def main():
     ap=argparse.ArgumentParser(description=__doc__);ap.add_argument('--stage',type=Path,required=True)
     ap.add_argument('--public-key',type=Path,required=True);ap.add_argument('--stock',type=Path,required=True);ap.add_argument('--output',type=Path,required=True)
-    args=ap.parse_args();print(json.dumps(integrate(args.stage,args.public_key.read_text(),args.stock,args.output),indent=2))
+    ap.add_argument('--wireguard-module',type=Path,help='private wireguard.ko built for this kernel; without it the image has no WireGuard kernel support')
+    args=ap.parse_args();print(json.dumps(integrate(args.stage,args.public_key.read_text(),args.stock,args.output,args.wireguard_module),indent=2))
 
 
 if __name__=='__main__':main()

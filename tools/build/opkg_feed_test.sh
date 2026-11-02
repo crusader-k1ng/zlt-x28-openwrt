@@ -56,6 +56,8 @@ check "  and not installed" "$(inst kmod-ipt-tproxy)" 0
 check "no 5.15 upgrade is offered" "$(opkg list-upgradable 2>/dev/null | grep -cE '^(kernel|kmod-)')" 0
 check "userspace still installs" "$(try tcpdump)" 0
 check "userspace needing kmod-tun installs" "$(try openvpn-mbedtls)" 0
+check "PPTP installs through kmod-mppe" "$(try ppp-mod-pptp)" 0
+check "L2TP installs" "$(try xl2tpd)" 0
 echo "failures: $fails"
 exit $((fails > 0))
 EOF

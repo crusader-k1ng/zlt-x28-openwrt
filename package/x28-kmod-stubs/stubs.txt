@@ -8,6 +8,7 @@ kmod-backlight
 kmod-backlight-pwm
 kmod-crypto-acompress
 kmod-crypto-aead
+kmod-crypto-arc4
 kmod-crypto-authenc
 kmod-crypto-cbc
 kmod-crypto-ccm
@@ -120,6 +121,7 @@ kmod-mdio-devres
 kmod-mfd
 kmod-mii
 kmod-mmc
+kmod-mppe
 kmod-nat46
 kmod-net-selftests
 kmod-nf-conncount

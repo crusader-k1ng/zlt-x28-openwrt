@@ -37,6 +37,10 @@ RENAMED = {'nf_log_syslog': ('nf_log_common', 'nf_log_ipv4', 'nf_log_ipv6'),
            'xt_MASQUERADE': ('ipt_MASQUERADE', 'ip6t_MASQUERADE')}
 
 
+# OpenWrt pulls this dependency in for packaging reasons; the code the kmod needs is built in without it (kmod-mppe -> arc4, #228).
+EXTRA_DEPENDS = {'kmod-crypto-arc4': {'kmod-crypto-user'}}
+
+
 def norm(name):
     return name.replace('-', '_')
 
@@ -57,7 +61,8 @@ def covered(kmods, have):
         if name not in memo:
             k = kmods.get(name)
             memo[name] = bool(k) and not missing(k['ko'], have) and \
-                all(ok(d, seen + (name,)) for d in k['depends'] if d.startswith('kmod-'))
+                all(ok(d, seen + (name,)) for d in k['depends']
+                    if d.startswith('kmod-') and d not in EXTRA_DEPENDS.get(name, ()))
         return memo[name]
     return sorted(n for n in kmods if ok(n))
 
