@@ -51,6 +51,7 @@ Conventions:
 | 34 | opkg stub feed with the image's real opkg (chroot) | 2026-11-01 | ✅ 19 of 19 checks: available stubs/userspace install; incomplete `ipset`, `kmod-nft-core` and `iptables-mod-tproxy` are refused; not yet on a unit | [BUILD](BUILD.md#opkg-feed-for-the-vendor-kernel-200) |
 | 35 | Explicit vendor-ipset dependency chain (#200), disposable container | 2026-11-01 | ✅ signed update, invalid-signature rejection, install/remove/reinstall; unchanged upstream payloads; full aggregate refused; not on device | [Evidence](research/vendor-ipset-packaging.md) |
 | 36 | X28 opkg feed on the unit (live on 190b, then a clean flash of 219) | 2026-11-02 | ✅ see [section 36](#36-x28-opkg-feed-on-the-unit-2026-11-02); ipset set types and running features not tested |
+| 37 | VPN speed and CPU limits, image 219 | 2026-11-02 | ✅ OpenVPN about 100 Mbit/s, limited by one core; WireGuard 715 sending and 330 receiving, CPU not saturated: [section 37](#37-vpn-speed-and-cpu-limits-on-the-router-2026-11-02) |
 
 Inactive `rootfs_sig_a` passed an exact changed-page-and-restore test (22), and the native image then booted from slot A (24). What is not proven: Wi-Fi clients and throughput, a long soak, and any off-device rewrite of `misc` (28).
 
@@ -363,3 +364,30 @@ in uninterruptible sleep in every sample, which counts as 3 of load on a CPU tha
 **Not verified:** creating ipset sets or the kernel features behind any stub, a Passwall2 run on this image, and the UART
 shell's transmit line. Restoring a saved overlay as a whole would hide the new `opkg` state, so settings were restored file
 by file.
+
+## 37. VPN speed and CPU limits on the router (2026-11-02)
+
+- **Question**: how fast can OpenVPN and WireGuard go on this device, and what limits them?
+- **Setup**: image 219, slot A, UDP. `iperf3` for 20 s per test, once per setup, between the router and a Docker peer on a LAN
+  laptop behind another router. No cellular data. The router's `iperf3` ran from RAM. OpenVPN is the feed's 2.5.8 with mbed TLS.
+  WireGuard is `wireguard-linux-compat` 1.0.20220627 built from the SDK tree and loaded from RAM, with no symbol version
+  check ([#227](https://github.com/mralinp/zlt-x28-openwrt/issues/227)).
+
+| Test | Router sends | Router receives | Total CPU (4 cores) |
+|---|---|---|---|
+| No tunnel | 856 Mbit/s | 363 Mbit/s | 9% / 36% |
+| WireGuard | 630 Mbit/s | 268 Mbit/s | 51% |
+| WireGuard, 4 streams | 715 Mbit/s | 330 Mbit/s | 55–58% |
+| OpenVPN AES-128-GCM | 102 Mbit/s | 58 Mbit/s | 24–27% |
+| OpenVPN AES-256-GCM | 98 Mbit/s | 59 Mbit/s | 24–27% |
+| OpenVPN ChaCha20-Poly1305 | 77 Mbit/s | 75 Mbit/s | 26% |
+
+With 4 streams, OpenVPN sent 95–101 Mbit/s with AES and 91 with ChaCha20. SoC temperature stayed at 45–48 °C, with no kernel
+errors in `dmesg` or on UART.
+
+**Reading the results:** OpenVPN is limited by one CPU core: 25% of total CPU is one full core, and more streams don't help.
+WireGuard uses all four cores and stayed under 60%, so its limit was not reached. Receive results are capped by the path from
+the laptop, which carries about 365 Mbit/s with no tunnel.
+
+**Not verified:** LAN clients forwarded through a tunnel, which adds NAT and routing cost; a tunnel across the carrier; other
+OpenVPN builds; and long-term WireGuard stability.
