@@ -1,0 +1,28 @@
+#!/bin/sh /etc/rc.common
+# Loads the WireGuard module built for the vendor kernel. It has no symbol version check, so it runs after x28-bootok
+# (S96) has reset the boot tries, and a load that never finishes is not retried: a crash here must not become a boot loop.
+
+START=97
+
+MOD=/lib/modules/4.19.205/wireguard.ko
+MARK=/etc/x28-wireguard.loading
+
+start() {
+	(
+		sleep 30
+		[ -d /sys/module/wireguard ] && exit 0
+		if [ -e "$MARK" ]; then
+			logger -t x28-wireguard "previous load did not finish; not loading. Remove $MARK to try again"
+			exit 0
+		fi
+		touch "$MARK"
+		sync
+		insmod "$MOD" || { logger -t x28-wireguard "insmod failed"; rm -f "$MARK"; exit 1; }
+		for i in $(uci -q show network | sed -n "s/^network\.\([^.]*\)\.proto='wireguard'$/\1/p"); do
+			ifup "$i"
+		done
+		sleep 120
+		rm -f "$MARK"
+		sync
+	) &
+}

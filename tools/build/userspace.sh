@@ -18,7 +18,9 @@ PACKAGES="-firewall4 -nftables -kmod-nft-offload
   luci-base luci-mod-admin-full luci-theme-bootstrap luci-app-opkg
   luci-app-firewall luci-proto-ipv6 luci-proto-ppp
   iwinfo rpcd-mod-iwinfo block-mount ubi-utils
-  uhttpd uhttpd-mod-ubus rpcd-mod-luci"
+  uhttpd uhttpd-mod-ubus rpcd-mod-luci
+  -dnsmasq dnsmasq-full
+  openvpn-openssl luci-app-openvpn xl2tpd ppp-mod-pptp wireguard-tools luci-proto-wireguard"
 
 OUT=$(mkdir -p "${1:-out}" && cd "${1:-out}" && pwd)
 WORK=${WORK:-work}
@@ -41,6 +43,8 @@ grep -q '^libiwinfo20230701 - 2023-07-01-ca79f641-3$' "$OUT"/*.manifest ||
 # The preinit hook relies on this block's extroot behaviour (#183).
 grep -q '^ubi-utils - ' "$OUT"/*.manifest && grep -q '^block-mount - 2023-02-28-bfe882d5-' "$OUT"/*.manifest ||
   { echo "the image lacks ubi-utils or the expected block-mount" >&2; exit 1; }
+# Our dnsmasq-full has ipset and no nftset (#203): the feed's build would pull nftables-json in.
+grep -q '^dnsmasq-full - .*-x28$' "$OUT"/*.manifest || { echo "the image did not take our dnsmasq-full" >&2; exit 1; }
 if grep -qE '^(firewall4|nftables[a-z-]*) ' "$OUT"/*.manifest; then
   echo "firewall4/nftables ended up in the image" >&2
   exit 1
