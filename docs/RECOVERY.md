@@ -288,9 +288,9 @@ silkscreen **`TZ7.823.432 X28`**). Logic level is **1.8 V**. Viewed as in the ph
 
 | Hole | Signal | Connect to |
 |---|---|---|
-| lower-left | **board TX** (idles at 1.8 V) | adapter RX, through a 1.8-to-3.3 V level shifter |
+| lower-right | **board TX** (idles at 1.8 V) | adapter RX, through a 1.8-to-3.3 V level shifter |
 | middle | **GND** | adapter GND (and the shifter's GND) |
-| upper-right | **board RX** (1.8 V) | adapter TX, through the shifter; leave it off for read-only capture |
+| upper-left | **board RX** (1.8 V) | adapter TX, through the shifter; leave it off for read-only capture |
 
 | Back of the board | The footprint |
 |---|---|
