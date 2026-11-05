@@ -33,25 +33,46 @@ x28_mipc_reg() {
  return 1
 }
 
-# The vendor dialer rewrites the initial-attach APN (ql_ia_apn_set) instead of asking for a second PDN, and a PDN
-# whose APN differs from the attach one is refused (observed, result 1314103, on a roaming SIM). Same as the SDK's check_ia.
-x28_mipc_sync_attach() {
- local apn="$1" ip="$2" ia ia_apn ia_pdp ia_roam i
- ia="$(mipc_wan_cli --apn_ia_get 2>/dev/null | sed -n 's/^IA apn:\([^ ]*\) pdp_type:\([0-9]*\) roaming_type:\([0-9]*\).*/\1 \2 \3/p' | head -n 1)"
- set -- $ia
- ia_apn="$(echo "$1" | tr 'A-Z' 'a-z')" ia_pdp="$2" ia_roam="$3"
- [ "$ia_apn" = "$(echo "$apn" | tr 'A-Z' 'a-z')" ] && [ "$ia_pdp" = "$ip" ] && [ "$ia_roam" = 3 ] && return 0
- mipc_wan_cli --apn_ia_set "$apn" "$ip" 3 >/dev/null 2>&1 || return 1
- # The attach profile applies on the next attach.
- mipc_wan_cli --at_cmd at+cfun=0 >/dev/null 2>&1
- sleep 2
- # ponytail: radio left off if all three cfun=1 fail; the next retry would find the profile already in sync.
- for i in 1 2 3; do mipc_wan_cli --at_cmd at+cfun=1 >/dev/null 2>&1 && break; done
- i=0
+# mipc_wan_cli exits 0 whatever happened (SDK main), so AT results are judged by their OK line.
+x28_mipc_cfun_on() {
+ local i
+ for i in 1 2 3; do
+  mipc_wan_cli --at_cmd at+cfun=1 2>/dev/null | grep -q '^OK' && return 0
+  sleep 1
+ done
+ return 1
+}
+
+x28_mipc_wait_reg() {
+ local i=0
  until x28_mipc_reg >/dev/null; do
   [ "$i" -ge 40 ] && return 1
   sleep 1; i=$((i + 1))
  done
+}
+
+# 0 when the modem's attach profile is exactly $1 (APN, case-insensitive) $2 (PDP type) with roaming type 3.
+x28_mipc_ia_match() {
+ local ia
+ ia="$(mipc_wan_cli --apn_ia_get 2>/dev/null | sed -n 's/^IA apn:\([^ ]*\) pdp_type:\([0-9]*\) roaming_type:\([0-9]*\).*/\1 \2 \3/p' | head -n 1)"
+ [ "$(echo "${ia%% *}" | tr 'A-Z' 'a-z')" = "$(echo "$1" | tr 'A-Z' 'a-z')" ] && [ "${ia#* }" = "$2 3" ]
+}
+
+# The vendor dialer rewrites the initial-attach APN (ql_ia_apn_set) instead of asking for a second PDN, and a PDN
+# whose APN differs from the attach one is refused (observed, result 1314103, on a roaming SIM). Same as the SDK's check_ia.
+x28_mipc_sync_attach() {
+ if x28_mipc_ia_match "$1" "$2"; then
+  # In sync but not registered: an earlier attempt may have left the radio off.
+  x28_mipc_reg >/dev/null && return 0
+  x28_mipc_cfun_on && x28_mipc_wait_reg
+  return
+ fi
+ mipc_wan_cli --apn_ia_set "$1" "$2" 3 >/dev/null 2>&1
+ x28_mipc_ia_match "$1" "$2" || return 1
+ # The attach profile applies on the next attach.
+ mipc_wan_cli --at_cmd at+cfun=0 >/dev/null 2>&1
+ sleep 2
+ x28_mipc_cfun_on && x28_mipc_wait_reg
 }
 
 x28_mipc_ipv4() {
@@ -155,13 +176,13 @@ x28_mipc_fail_owned() {
 }
 
 x28_mipc_setup() {
- local interface="$1" apn mtu iptype roaming defaultroute peerdns metric sim reply result cid ifname
+ local interface="$1" apn mtu iptype roaming defaultroute peerdns metric sim rc reply result cid ifname
  local v4_addr v4_mask v4_gw v4_dns1 v4_dns2 prefix v6_addr v6_gw v6_dns1 v6_dns2 v6_global net64 i ll
  json_get_vars apn mtu iptype roaming defaultroute peerdns metric
  mtu="${mtu:-1500}"; iptype="${iptype:-3}"; roaming="${roaming:-0}"
  defaultroute="${defaultroute:-1}"; peerdns="${peerdns:-1}"; metric="${metric:-0}"
  # Empty APN = automatic from the SIM, resolved once the SIM is ready.
- if { [ -n "$apn" ] && { [ "${#apn}" -gt 100 ] || case "$apn" in *[!a-zA-Z0-9._-]*) true ;; *) false ;; esac; }; } ||
+ if { [ -n "$apn" ] && { [ "${#apn}" -gt 100 ] || case "$apn" in -*|*[!a-zA-Z0-9._-]*) true ;; *) false ;; esac; }; } ||
     { [ "$iptype" != 1 ] && [ "$iptype" != 2 ] && [ "$iptype" != 3 ]; } ||
     ! x28_mipc_uint "$mtu" 1500 || [ "$mtu" -lt 576 ] ||
     ! x28_mipc_uint "$metric" 65535 ||
@@ -189,7 +210,7 @@ x28_mipc_setup() {
  if [ -z "$apn" ]; then
   # Tests replace the lookup through X28_MIPC_APN_CMD.
   apn="$(${X28_MIPC_APN_CMD:-x28-apn} 2>/dev/null | head -n 1 | cut -f 2)"
-  case "$apn" in ''|*[!a-zA-Z0-9._-]*) proto_notify_error "$interface" NO_SIM_APN; return 1 ;; esac
+  case "$apn" in ''|-*|*[!a-zA-Z0-9._-]*) proto_notify_error "$interface" NO_SIM_APN; return 1 ;; esac
  fi
 
  # Roaming is off by default, like the vendor's data-roaming switch: refuse the bearer while roaming unless asked.
@@ -210,9 +231,16 @@ x28_mipc_setup() {
  json_add_string bearer_bitmask "0xfffdffff"
  json_add_int mtu "$mtu"
  json_add_int mode 1
- reply="$(mipc_wan_cli --data_call_act "$(json_dump)" 2>/dev/null)" || {
-  proto_notify_error "$interface" CONNECT_FAILED; return 1;
- }
+ reply="$(timeout 30 mipc_wan_cli --data_call_act "$(json_dump)" 2>/dev/null)"
+ rc=$?
+ if [ "$rc" = 124 ]; then
+  # After a teardown the modem may never answer (observed, #337); a radio cycle clears it, then netifd retries.
+  mipc_wan_cli --at_cmd at+cfun=0 >/dev/null 2>&1
+  sleep 2
+  x28_mipc_cfun_on && x28_mipc_wait_reg
+  proto_notify_error "$interface" CONNECT_TIMEOUT; return 1
+ fi
+ [ "$rc" = 0 ] || { proto_notify_error "$interface" CONNECT_FAILED; return 1; }
  if ! json_load "$reply"; then
   proto_notify_error "$interface" INVALID_REPLY
   proto_block_restart "$interface"; return 1
