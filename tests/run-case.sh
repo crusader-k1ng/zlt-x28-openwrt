@@ -27,6 +27,14 @@ mipc_wan_cli() {
    case "$2" in
     at+cereg?) printf 'AT response:\n+CEREG: 0,%s\n\nOK\n' "$(cat "$case_dir/reg")" ;;
     at+c5greg?) printf 'AT response:\n+C5GREG: 0,0\n\nOK\n' ;;
+    at+cops=3,2) printf 'AT response:\nOK\n' ;;
+    at+cops?) set -- "$1" "$(cat "$case_dir/cops")"; printf 'AT response:\n+COPS: %s,2,"%s",7\n\nOK\n' "${2%% *}" "${2#* }" ;;
+    at+cops=0) echo "0 43211" > "$case_dir/cops"; printf 'AT response:\nOK\n' ;;
+    at+cops=1,2,*)
+     # Like the modem: it can answer an error and still apply (cops_err_applied), or answer OK and not.
+     [ "$(cat "$case_dir/cops_set_ok")" = 1 ] || [ "$(cat "$case_dir/cops_err_applied")" = 1 ] || { printf 'AT response:\n+CME ERROR: 3\n'; return 0; }
+     [ "$(cat "$case_dir/cops_noop")" = 1 ] || echo "1 $(echo "${2#at+cops=1,2,}" | tr -d '"')" > "$case_dir/cops"
+     if [ "$(cat "$case_dir/cops_err_applied")" = 1 ]; then printf 'AT response:\n+CME ERROR: 100\n'; else printf 'AT response:\nOK\n'; fi ;;
     at+cfun=0) printf 'AT response:\nOK\n' ;;
     at+cfun=1) [ "$(cat "$case_dir/cfun_ok")" = 1 ] && printf 'AT response:\nOK\n' ;;
     *) printf 'Unexpected AT command\n' >&2; return 99 ;;
