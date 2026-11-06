@@ -19,6 +19,8 @@ proto_x28_mipc_init_config() {
  proto_config_add_string celllock
  proto_config_add_string lteband_mode
  proto_config_add_array 'lteband_list:uinteger'
+ proto_config_add_string nrband_mode
+ proto_config_add_array 'nrband_list:uinteger'
  proto_config_add_defaults
 }
 
@@ -110,7 +112,8 @@ x28_mipc_operator() {
 # LTE band lock via AT+EPBSE=<gsm>,<umts>,<lte 1-32>,<lte 33-64>,<4 more> (the last four read 0 here; GSM, UMTS and those are
 # kept as read). Supported LTE bands of this modem (RG500L-EU): 1 3 5 7 8 20 28 32 and 38 40 41 42 43.
 # lteband_mode: none | allow (only the listed bands) | deny (all but the listed). A change re-registers the modem, so it
-# is applied before the data call; a mask that does not read back or has no service is put back as it was.
+# is applied before the data call and read back. Strict: a mask that took effect stays even if there is no service (the owner
+# removes the lock); only a mask that did not take effect is an error.
 X28_MIPC_LTE_LO=2282225877
 X28_MIPC_LTE_HI=1952
 
@@ -119,7 +122,7 @@ x28_mipc_epbse() {
 }
 
 x28_mipc_bandlock() {
- local mode="$1" list="$2" cur lo hi b lo_l=0 hi_l=0 want i=0 old
+ local mode="$1" list="$2" cur lo hi b lo_l=0 hi_l=0 want i=0
  cur="$(x28_mipc_epbse 'at+epbse?')"
  case "$cur" in [0-9]*,[0-9]*,[0-9]*,[0-9]*,[0-9]*,[0-9]*,[0-9]*,[0-9]*,[0-9]*,[0-9]*) ;; *) return 1 ;; esac
  for b in $list; do
@@ -131,20 +134,67 @@ x28_mipc_bandlock() {
   *) lo=$X28_MIPC_LTE_LO; hi=$X28_MIPC_LTE_HI ;;
  esac
  [ $((lo | hi)) -ne 0 ] || return 1
- old="$cur"
  want="$(echo "$cur" | cut -d, -f1,2),$lo,$hi,$(echo "$cur" | cut -d, -f5-)"
  [ "$cur" = "$want" ] && return 0
  mipc_wan_cli --at_cmd "at+epbse=$want" >/dev/null 2>&1
- until [ "$(x28_mipc_epbse 'at+epbse?')" = "$want" ]; do
-  [ "$i" -ge 10 ] && break
+ while [ "$i" -le 10 ]; do
+  [ "$(x28_mipc_epbse 'at+epbse?')" = "$want" ] && {
+   # Strict: the choice stays. No service afterwards is for the owner to fix by removing the lock.
+   sleep 3
+   x28_mipc_wait_reg || logger -t x28_mipc "no service after the 4G band lock ($want); remove the lock to get it back"
+   return 0
+  }
   sleep 1; i=$((i + 1))
  done
- if [ "$i" -lt 10 ]; then
-  sleep 3
-  x28_mipc_wait_reg && return 0
- fi
- mipc_wan_cli --at_cmd "at+epbse=$old" >/dev/null 2>&1
+ [ "$mode" = none ] && { logger -t x28_mipc "4G band mask could not be widened to $want"; return 0; }
  return 1
+}
+
+# 5G band lock via x28-nrband (MIPC; AT has no NR band control here). Supported NR bands of this modem (RG500L-EU):
+# n1 n3 n5 n7 n8 n20 n28 n38 n40 n41 n77 n78; NR band n is bit n-1 of three 32-bit words. nrband_mode: none | allow | deny,
+# like the 4G lock: applied before the data call and read back; strict, it is never undone for lack of service.
+x28_mipc_nrband() {
+ local mode="$1" list="$2" sup cur want w0 w1 w2 c0 c1 c2 s0 s1 s2 l0=0 l1=0 l2=0 b i=0 out
+ local tool="${X28_MIPC_NRBAND:-x28-nrband}"
+ # "No lock" must never cost the WAN: without a working tool there is nothing to undo, so only allow/deny fail.
+ command -v "$tool" >/dev/null 2>&1 || { [ "$mode" = none ]; return; }
+ out="$(timeout 20 "$tool" get 2>/dev/null)" || { [ "$mode" = none ]; return; }
+ sup="$(echo "$out" | sed -n 's/^support=//p')"; cur="$(echo "$out" | sed -n 's/^current=//p')"
+ set -- $sup; s0="$1" s1="$2" s2="$3"
+ set -- $cur; c0="$1" c1="$2" c2="$3"
+ [ -n "$s0" ] && [ -n "$s1" ] && [ -n "$s2" ] && [ -n "$c0" ] && [ -n "$c1" ] && [ -n "$c2" ] || { [ "$mode" = none ]; return; }
+ case "$s0$s1$s2$c0$c1$c2" in *[!0-9a-fA-F]*) { [ "$mode" = none ]; return; } ;; esac
+ for b in $list; do
+  case $(( (b - 1) / 32 )) in 0) l0=$((l0 | (1 << ((b - 1) % 32)))) ;; 1) l1=$((l1 | (1 << ((b - 1) % 32)))) ;; *) l2=$((l2 | (1 << ((b - 1) % 32)))) ;; esac
+ done
+ case "$mode" in
+  allow) w0=$((l0 & 0x$s0)); w1=$((l1 & 0x$s1)); w2=$((l2 & 0x$s2)) ;;
+  deny) w0=$((0x$s0 & ~l0 & 0xffffffff)); w1=$((0x$s1 & ~l1 & 0xffffffff)); w2=$((0x$s2 & ~l2 & 0xffffffff)) ;;
+  *) w0=$((0x$s0)); w1=$((0x$s1)); w2=$((0x$s2)) ;;
+ esac
+ [ $((w0 | w1 | w2)) -ne 0 ] || { [ "$mode" = none ]; return; }
+ want="$(printf '%08x %08x %08x' "$w0" "$w1" "$w2")"
+ [ "$cur" = "$want" ] && return 0
+ timeout 30 "$tool" set $want >/dev/null 2>&1
+ while [ "$i" -le 10 ]; do
+  [ "$(timeout 20 "$tool" get 2>/dev/null | sed -n 's/^current=//p')" = "$want" ] && {
+   # Strict: the choice stays. No service afterwards is for the owner to fix by removing the lock.
+   sleep 3
+   x28_mipc_wait_reg || logger -t x28_mipc "no service after the 5G band lock ($want); remove the lock to get it back"
+   return 0
+  }
+  sleep 1; i=$((i + 1))
+ done
+ [ "$mode" = none ] && { logger -t x28_mipc "NR band mask could not be widened to $want"; return 0; }
+ return 1
+}
+
+# Every listed 5G band must be one the modem supports.
+x28_mipc_nrbands_ok() {
+ local b
+ for b in $1; do
+  case " 1 3 5 7 8 20 28 38 40 41 77 78 " in *" $b "*) ;; *) return 1 ;; esac
+ done
 }
 
 # Every listed band must be one of the modem's supported LTE bands.
@@ -293,11 +343,13 @@ x28_mipc_fail_owned() {
 }
 
 x28_mipc_setup() {
- local interface="$1" apn mtu iptype roaming plmn celllock lteband_mode defaultroute peerdns metric sim rc reply result cid ifname
+ local interface="$1" apn mtu iptype roaming plmn celllock lteband_mode nrband_mode defaultroute peerdns metric sim rc reply result cid ifname
  local v4_addr v4_mask v4_gw v4_dns1 v4_dns2 prefix v6_addr v6_gw v6_dns1 v6_dns2 v6_global net64 i ll
- json_get_vars apn mtu iptype roaming plmn celllock lteband_mode defaultroute peerdns metric
+ json_get_vars apn mtu iptype roaming plmn celllock lteband_mode nrband_mode defaultroute peerdns metric
  local bands="" b
  json_get_values bands lteband_list
+ local nrbands=""
+ json_get_values nrbands nrband_list
  mtu="${mtu:-1500}"; iptype="${iptype:-3}"; roaming="${roaming:-0}"
  defaultroute="${defaultroute:-1}"; peerdns="${peerdns:-1}"; metric="${metric:-0}"
  # Empty APN = automatic from the SIM, resolved once the SIM is ready.
@@ -308,6 +360,8 @@ x28_mipc_setup() {
     { [ -n "$celllock" ] && ! x28_mipc_cell_ok "$celllock"; } ||
     { [ -n "$lteband_mode" ] && [ "$lteband_mode" != none ] && [ "$lteband_mode" != allow ] && [ "$lteband_mode" != deny ]; } ||
     ! x28_mipc_bands_ok "$bands" ||
+    { [ -n "$nrband_mode" ] && [ "$nrband_mode" != none ] && [ "$nrband_mode" != allow ] && [ "$nrband_mode" != deny ]; } ||
+    ! x28_mipc_nrbands_ok "$nrbands" ||
     { [ "$roaming" != 0 ] && [ "$roaming" != 1 ]; } ||
     { [ -n "$plmn" ] && { [ "${#plmn}" -lt 5 ] || [ "${#plmn}" -gt 6 ] || case "$plmn" in *[!0-9]*) true ;; *) false ;; esac; }; } ||
     { [ "$defaultroute" != 0 ] && [ "$defaultroute" != 1 ]; } ||
@@ -338,6 +392,7 @@ x28_mipc_setup() {
 
  x28_mipc_operator "$plmn" || { proto_notify_error "$interface" OPERATOR_FAILED; return 1; }
  x28_mipc_celllock "$celllock" || { proto_notify_error "$interface" CELL_LOCK_FAILED; proto_block_restart "$interface"; return 1; }
+ [ -z "$nrband_mode" ] || x28_mipc_nrband "$nrband_mode" "$nrbands" || { proto_notify_error "$interface" NRBAND_LOCK_FAILED; proto_block_restart "$interface"; return 1; }
  [ -z "$lteband_mode" ] || x28_mipc_bandlock "$lteband_mode" "$bands" || { proto_notify_error "$interface" BAND_LOCK_FAILED; proto_block_restart "$interface"; return 1; }
  # Roaming is off by default, like the vendor's data-roaming switch: refuse the bearer while roaming unless asked.
  if [ "$roaming" != 1 ] && [ "$(x28_mipc_reg)" = 5 ]; then
