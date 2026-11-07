@@ -544,6 +544,19 @@ X28 feed. `userspace.sh` fails if the image did not take this build.
   boot tries, then brings up any WireGuard interfaces. A marker in `/etc` stops a load that crashed the unit from being
   retried, so a crash cannot become a boot loop.
   The module loads with no symbol version check; see [#227](https://github.com/mralinp/zlt-x28-openwrt/issues/227).
+- **Publishing the modules (#352):** they cannot be built from public files: `build.sh` needs the configured SDK kernel
+  tree (vendor patches, config, headers), and a vanilla 4.19.205 tree is not a substitute ([CRC research](research/kernel-module-crc.md)).
+  The built `.ko` files are another matter: the owner accepted publishing built artifacts made with the SDK tree
+  (the native image, #254), the sources are GPL-2.0 and public, and the SDK's own files stay out. So the eight
+  modules are published as built, once per kernel rather than per release, because they change only with the sources or
+  the kernel: release `kmods-4.19.205` (as `feed-2` is for ipset) with the eight `.ko` files and `SHA256SUMS`.
+  Publish after a rebuild with `gh release create kmods-4.19.205 private/kmods/*.ko private/kmods/SHA256SUMS`
+  (`gh release upload --clobber` to replace). Every `vX.Y.Z` release carries one assembly asset, `x28-assembly-vX.Y.Z.tar.gz`, plus `SHA256SUMS`. It holds
+  everything the flasher needs to assemble the image except the vendor files from the unit's own backup: the OpenWrt
+  userspace rootfs and its manifest, `overlay/` (the package files `first_boot.py` reads), `kmods/` (the eight modules,
+  taken from `kmods-4.19.205` and checked in CI), `ipk/` (ipset from `feed-2`; `alsa-lib` and `libstdcpp6` from OpenWrt
+  23.05.5, pinned by hash in `release.yml`) and its own `SHA256SUMS`. The flasher downloads the latest release, unpacks
+  that one file and runs the assembly with `--kmods kmods --ipk ipk/*.ipk`.
 - **HTTPS for LuCI:** `libustream-mbedtls` and `px5g-mbedtls`; `first_boot.py` sets `redirect_https` and the certificate
   name `x28`. uhttpd makes a self-signed EC certificate on its first start, so each unit has its own, and browsers warn
   about it once.
