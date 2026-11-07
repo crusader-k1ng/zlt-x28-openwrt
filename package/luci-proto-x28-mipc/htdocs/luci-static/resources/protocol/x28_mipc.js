@@ -22,6 +22,7 @@ network.registerPatternVirtual(/^ccmni[0-9]+$/);
  ['OPERATOR_FAILED', 'The chosen operator did not register; the modem was set back to automatic'],
  ['CELL_LOCK_FAILED', 'The cell lock did not take effect on the modem'],
  ['BAND_LOCK_FAILED', 'The band lock did not take effect on the modem'],
+ ['NETMODE_FAILED', 'The network mode did not take effect on the modem'],
  ['NRBAND_LOCK_FAILED', 'The 5G band lock did not take effect on the modem, or the band tool (x28-nrband) is missing'],
  ['INVALID_REPLY', 'The modem returned an invalid bearer response'],
  ['LINK_NOT_READY', 'The reported bearer device is not up'],
@@ -151,6 +152,13 @@ return network.registerProtocol('x28_mipc', {
     return form.Value.prototype.load.call(this, section_id);
    }, this));
   };
+  // Radio technology (mipc_wan_cli nw_set_rat). SA/NSA and TDD/FDD are separate controls and not offered yet.
+  option = section.taboption('carrier', form.ListValue, 'netmode', _('Network mode'),
+   _('Which radio technologies the modem may use. The modem re-registers when this changes. If there is no service afterwards, set it back to Automatic: it is not undone for you.'));
+  option.value('auto', _('Automatic (4G and 5G)'));
+  option.value('4g', _('4G only'));
+  option.value('5g', _('5G only'));
+  option.default = 'auto';
   // 4G band lock (AT+EPBSE). The list is this modem's supported LTE bands.
   option = section.taboption('carrier', form.ListValue, 'lteband_mode', _('4G band lock'),
    _('Restrict which LTE bands the modem may use. The modem re-registers when this changes. If there is no service afterwards, remove the lock: it is not undone for you.'));
