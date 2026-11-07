@@ -178,6 +178,10 @@ and flashing, with every guard and typed confirmation of the recovery procedure 
 It runs as a native window on macOS (Apple silicon), and as installers for Linux and Windows built by its CI. The screenshot hides the unit's
 identifiers. Read [Build and flash](#build-and-flash) and the recovery docs before you use it.
 
+Note: This flasher enables SSH with root access on firmware versions up to 8.6.26. I haven't been able to find newer versions to test, so if you have one, please let me know by opening an issue.
+
+> **Note:** Gaining root access also makes it possible to unlock carrier-locked units. The device stores its carrier-lock settings in a configuration file. Simply set all unlock-code fields to 0 and clear the carrier list to allow SIM cards from any carrier. Ez pz! 😎
+
 ## Build and flash
 
 Backup, USB access, image assembly and flashing belong to [mralinp/x28-flasher](https://github.com/mralinp/x28-flasher)
