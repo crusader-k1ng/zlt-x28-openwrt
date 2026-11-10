@@ -6,7 +6,7 @@ milestones below, written by hand, and the full per-release list at the bottom, 
 
 ## Unreleased
 
-Nothing yet.
+- Wi-Fi LED follows enabled, running wireless interfaces with carrier instead of any Wi-Fi-shaped interface left up by the vendor driver (#528).
 
 ## Milestones
 
