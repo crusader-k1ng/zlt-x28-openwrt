@@ -26,9 +26,38 @@ x28_ud_new_image() {
 	mount -t ubifs /dev/ubi1_2 "$X28_UD_MNT" 2>/dev/null || return 0
 	if [ -f "$X28_UD_MNT/etc/.extroot-uuid" ] && [ "$(cat "$X28_UD_MNT/etc/.extroot-uuid")" != "$root" ]; then
 		# The tag goes last and only after the rest: a half-done wipe repeats next boot, old settings never meet a new image.
-		rm -rf "$X28_UD_MNT/upper" "$X28_UD_MNT/work" && rm -f "$X28_UD_MNT/etc/.extroot-uuid"
+		rm -rf "$X28_UD_MNT/upper" "$X28_UD_MNT/work" && rm -f "$X28_UD_MNT/etc/.extroot-uuid" && x28_ud_keep
+	elif [ ! -f "$X28_UD_MNT/etc/.extroot-uuid" ]; then
+		x28_ud_keep
 	fi
+	rm -f "$X28_UD_MNT"/x28-keep-*.tgz "$X28_UD_MNT/x28-keep.new" || :
 	umount "$X28_UD_MNT"
+}
+
+# Settings kept across an upgrade (#477): the old image's platform.sh left its backup here as x28-keep-<target slot>.tgz. A new image on
+# that slot hands it to 80_mount_root as OpenWrt's own /sysupgrade.tgz (restored into the fresh overlay, passwd/shadow merged), with
+# only the files below: settings and keys, nothing a boot script runs or sources (those never passed the build guard). An archive
+# with a symlink, an absolute or ../ name, or that does not unpack is dropped and the image starts with its defaults.
+X28_UD_KEEP="etc/config etc/passwd etc/group etc/shadow etc/dropbear etc/uhttpd.crt etc/uhttpd.key etc/luci-uploads etc/backup"
+x28_ud_keep() {
+	local slot keep tmp=/tmp/x28-keep p out
+	slot="$(sed -n 's/.*bootslot=\([ab]\).*/\1/p' "$X28_UD_PROC/cmdline" 2>/dev/null)"
+	keep="$X28_UD_MNT/x28-keep-$slot.tgz"
+	[ -n "$slot" ] && [ -s "$keep" ] || return 0
+	rm -rf "$tmp"
+	if tar -tzf "$keep" 2>/dev/null | grep -q '^/\|\(^\|/\)\.\.\(/\|$\)' || ! mkdir -p "$tmp/x" "$tmp/y/etc" ||
+	   ! tar -xzf "$keep" -C "$tmp/x" 2>/dev/null || [ -n "$(find "$tmp/x" -type l)" ]; then
+		echo "- x28: kept settings unusable, starting with defaults -"; rm -rf "$tmp"; return 0
+	fi
+	for p in $X28_UD_KEEP; do [ ! -e "$tmp/x/$p" ] || mv "$tmp/x/$p" "$tmp/y/$p"; done
+	# Written aside and renamed: 80_mount_root ignores tar's status, so a truncated archive would restore half an /etc.
+	out="$X28_UD_MNT/upper/.x28-restore.tgz"
+	if mkdir -p "$X28_UD_MNT/upper" && (cd "$tmp/y" && tar -czf "$out" etc) && mv "$out" "$X28_UD_MNT/upper/sysupgrade.tgz"; then
+		echo "- x28: settings kept by the upgrade will be restored -"
+	else
+		rm -f "$out"
+	fi
+	rm -rf "$tmp"
 }
 
 # The running slot's tries in misc, this boot's included (record at 2048, tries at byte 9 for A, 13 for B, as in x28-bootok). Read only; empty if unreadable.
