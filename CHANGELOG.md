@@ -6,6 +6,10 @@ milestones below, written by hand, and the full per-release list at the bottom, 
 
 ## Unreleased
 
+- Add `x28-upgrade --refresh` to bypass the update-check cache without installing firmware (#530).
+- Compare release versions correctly with the image's BusyBox sort (#531).
+
+- Wi-Fi LED follows enabled, running wireless interfaces with carrier instead of any Wi-Fi-shaped interface left up by the vendor driver (#528).
 - Use curl for firmware downloads so upgrades work through Passwall2 when uclient-fetch times out; keep transfer errors visible.
 
 - Fix releases shipping the stale slot-A-only module loader: build x28-kmods r3 from current source, restoring Passwall2 transparent proxy on slot B.

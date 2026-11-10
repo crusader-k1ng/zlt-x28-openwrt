@@ -40,3 +40,6 @@ experiments/oem-ui/x28-luci-network-integration/files/usr/lib/lua/luci/controlle
 .test-results/
 
 x28-backup-*/
+
+# Local Playwright MCP runtime output
+.playwright-mcp/

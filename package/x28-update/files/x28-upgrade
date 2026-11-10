@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: GPL-2.0-only
 # x28-upgrade: one-command upgrade to the newest signed X28 image (#515), like OpenWrt's owut/auc with our releases as the server.
 #   x28-upgrade       check only: running version vs the newest release with a signed x28-sysupgrade-<ver>.tar
+#   x28-upgrade --refresh bypass the cached check; does not install anything
 #   x28-upgrade -y    download it to /tmp, check its .sha256, sysupgrade -T, then sysupgrade -k -u (writes the other slot, keeps
 #                     the settings changed from the image's defaults and the installed-package list, reboots)
 #   x28-upgrade -y -b the same in the background, output in /tmp/x28-upgrade.log (what LuCI's button runs)
@@ -18,14 +19,16 @@ LOCK=$TMP/x28-upgrade.lock
 die() { echo "x28-upgrade: FAILED: $*"; exit 1; }
 field() { echo "$info" | sed -n "s/.*\"$1\":\"*\([^\",}]*\).*/\1/p"; }
 
+refresh=
 case "$*" in
 	''|-y) ;;
+	--refresh) refresh=--refresh ;;
 	# The last line of the log always says how it ended (LuCI follows it): flashing, up to date or FAILED.
 	'-y -b') : > "$LOG"; ( ("$0" -y || echo "x28-upgrade: FAILED (exit $?)") > "$LOG" 2>&1 < /dev/null &); echo "started; output in $LOG"; exit 0 ;;
-	*) echo "usage: x28-upgrade [-y [-b]]" >&2; exit 2 ;;
+	*) echo "usage: x28-upgrade [--refresh | -y [-b]]" >&2; exit 2 ;;
 esac
 
-info=$($CHECK)
+info=$($CHECK $refresh)
 latest=$(field latest); cur=$(field current)
 [ -n "$latest" ] || die "$(field error) (is the WAN up?)"
 # Only a plain version goes into a path or URL, whatever the cache in /tmp says.

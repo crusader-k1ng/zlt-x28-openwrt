@@ -105,8 +105,8 @@ itself (`ucert`), writes the A/B slot it is **not** running, verifies it, and on
 
 - **LuCI**: Status > Overview shows *Firmware update* when a newer signed image is out (checked at most every 6 h, cached in `/tmp`).
   *Upgrade now* asks for confirmation, then downloads, checks and flashes; the unit reboots.
-- **SSH**: `x28-upgrade` only checks; `x28-upgrade -y` downloads the image to `/tmp`, checks its `.sha256`, runs `sysupgrade -T` and then
-  `sysupgrade -n` (settings are not kept). It refuses when the running slot still counts boot tries or `/tmp` is too small.
+- **SSH**: `x28-upgrade` checks using the cached result; `x28-upgrade --refresh` fetches a fresh result without installing anything. Only signed stable-form releases are offered, not `-rc.N` builds. `x28-upgrade -y` downloads the image to `/tmp`, checks its `.sha256`, runs `sysupgrade -T` and then
+  `sysupgrade -k -u` (keeps changed settings and the installed-package list). It refuses when the running slot still counts boot tries or `/tmp` is too small.
 - **By hand**: download the signed tarball from the [releases](https://github.com/mralinp/zlt-x28-openwrt/releases) and upload it in
   System > Backup / Flash Firmware.
 
@@ -240,8 +240,8 @@ Start with [docs/TESTING.md](docs/TESTING.md) for evidence and [docs/STATUS.md](
 
 ## Releases
 
-A merge to `main` that changes shippable files is released automatically (docs-only and CI-only merges are not). The version comes from the PR title (Conventional Commits:
-`feat` → minor, `type!` → major, otherwise patch); 0.x releases are pre-releases. Each release publishes one
+Work lands on `develop`, and each merge that changes shippable files is released automatically as a `vX.Y.Z-rc.N` pre-release; merging `develop` into `main` releases `vX.Y.Z`, stable from 1.0.0 (docs-only and CI-only merges release nothing). The version comes from the PR title (Conventional Commits:
+`feat` → minor, `type!` → major, otherwise patch); 0.x releases are pre-releases. Routers only offer stable-form releases ([WORKFLOW](docs/WORKFLOW.md)). Each release publishes one
 `x28-assembly-vX.Y.Z.tar.gz` bundle (userspace, package files, kernel modules, extra packages), the image built from it in CI
 (`x28-native-image.tar.gz`, read by the flasher) and a signed `x28-sysupgrade-<version>.tar` for [upgrading](#upgrading) a running unit; see [docs/BUILD.md](docs/BUILD.md). What changed, release by release: [CHANGELOG.md](CHANGELOG.md).
 
