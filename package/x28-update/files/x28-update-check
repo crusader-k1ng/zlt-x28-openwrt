@@ -7,13 +7,20 @@ CACHE=${X28_UPD_CACHE:-/tmp/x28-update.json}
 RELEASE=${X28_UPD_RELEASE:-/etc/x28-release}
 FETCH=${X28_UPD_FETCH:-uclient-fetch -q -T 15 -O -}
 
+refresh=false
+case "$*" in
+	'') ;;
+	--refresh) refresh=true ;;
+	*) echo "usage: x28-update-check [--refresh]" >&2; exit 2 ;;
+esac
+
 ttl=30
 grep -q '"latest"' "$CACHE" 2>/dev/null && ttl=360
 # Only a cache this user wrote: /tmp is world-writable.
-[ -n "$(find "$CACHE" -user "$(id -u)" -mmin -$ttl 2>/dev/null)" ] && exec cat "$CACHE"
+[ "$refresh" = false ] && [ -n "$(find "$CACHE" -user "$(id -u)" -mmin -$ttl 2>/dev/null)" ] && exec cat "$CACHE"
 
 semver() { grep -x '[0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*'; }
-newest() { sort -t. -k1,1n -k2,2n -k3,3n | tail -n 1; }
+newest() { sort -V | tail -n 1; }
 
 # A develop image says X.Y.Z-rc.N: its X.Y.Z is what it is measured against, and that release itself is newer than the rc.
 cur=$(grep -x '[0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*\(-rc\.[0-9][0-9]*\)\{0,1\}' 2>/dev/null < "$RELEASE")

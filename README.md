@@ -105,8 +105,8 @@ itself (`ucert`), writes the A/B slot it is **not** running, verifies it, and on
 
 - **LuCI**: Status > Overview shows *Firmware update* when a newer signed image is out (checked at most every 6 h, cached in `/tmp`).
   *Upgrade now* asks for confirmation, then downloads, checks and flashes; the unit reboots.
-- **SSH**: `x28-upgrade` only checks; `x28-upgrade -y` downloads the image to `/tmp`, checks its `.sha256`, runs `sysupgrade -T` and then
-  `sysupgrade -n` (settings are not kept). It refuses when the running slot still counts boot tries or `/tmp` is too small.
+- **SSH**: `x28-upgrade` checks using the cached result; `x28-upgrade --refresh` fetches a fresh result without installing anything. Only signed stable-form releases are offered, not `-rc.N` builds. `x28-upgrade -y` downloads the image to `/tmp`, checks its `.sha256`, runs `sysupgrade -T` and then
+  `sysupgrade -k -u` (keeps changed settings and the installed-package list). It refuses when the running slot still counts boot tries or `/tmp` is too small.
 - **By hand**: download the signed tarball from the [releases](https://github.com/mralinp/zlt-x28-openwrt/releases) and upload it in
   System > Backup / Flash Firmware.
 

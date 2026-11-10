@@ -24,6 +24,15 @@ echo 0.10.0-beta > "$dir/release"; run | grep -q '"current":"","latest":"0.10.0"
 mv "$dir/api.stable" "$dir/api"
 # cached: a changed API is not asked again within the period
 echo 0.10.0 > "$dir/release"; run >/dev/null; : > "$dir/api"; sh "$check" | grep -q '"latest":"0.10.0"'
+# Explicit refresh bypasses successful and failed caches and updates the cache for later callers.
+printf '[{"assets":[{"name":"x28-sysupgrade-0.12.0.tar"}]}]' > "$dir/api"
+sh "$check" --refresh | grep -q '"latest":"0.12.0"'
+: > "$dir/api"; sh "$check" | grep -q '"latest":"0.12.0"'
+sh "$check" --refresh | grep -q '"error"'
+printf '[{"assets":[{"name":"x28-sysupgrade-0.13.0.tar"}]}]' > "$dir/api"
+sh "$check" --refresh | grep -q '"latest":"0.13.0"'
+if sh "$check" --invalid >/dev/null 2>&1; then exit 1; fi
+: > "$dir/api"
 # no signed image, or the fetch fails: no notice, and the error is cached too
 run | grep -q '"error"'; X28_UPD_FETCH=false run | grep -q '"error"'
 run | grep -q newer && exit 1
@@ -52,6 +61,12 @@ command -v sha256sum >/dev/null || sha256sum() { shasum -a 256 "$@"; }
 upg() { rm -f "$dir/cache" "$dir/calls"; sh "$up" "$@"; }
 upg | grep -q "running 0.9.0, newest signed image 0.10.0" && [ ! -e "$dir/calls" ]    # check only: nothing downloaded or run
 upg -x 2>/dev/null && exit 1
+# CLI refresh forwards the option and never downloads or flashes, even when a newer version appears.
+printf '{"current":"0.9.0","latest":"0.9.0","newer":false}' > "$dir/cache"
+sh "$up" --refresh | grep -q 'newest signed image 0.10.0'
+[ ! -e "$dir/calls" ] && [ ! -e "$dir/t/x28-sysupgrade-0.10.0.tar" ]
+if sh "$up" --refresh -y >/dev/null 2>&1; then exit 1; fi
+
 upg -y | grep -q 'flashing 0.10.0 to slot b' && [ "$(cat "$dir/calls")" = "-T $dir/t/x28-sysupgrade-0.10.0.tar
 -k -u $dir/t/x28-sysupgrade-0.10.0.tar" ]   # -k: settings and the package list are kept (#477)
 echo 0.10.0 > "$dir/release"; upg -y | grep -q 'up to date' && [ ! -e "$dir/calls" ]; echo 0.9.0 > "$dir/release"
@@ -65,7 +80,7 @@ mkdir "$dir/t/x28-upgrade.lock"; upg -y | grep -q 'FAILED: an upgrade is already
 echo '{"current":"0.9.0","latest":"../../x","newer":true}' > "$dir/cache"; sh "$up" -y | grep -q 'FAILED: bad version'
 # -b: the background run ends its log with the outcome; the lock is gone afterwards
 printf '[{"assets":[{"name":"x28-sysupgrade-0.10.0.tar"}]}]' > "$dir/api"; rm -f "$dir/cache" "$dir/calls"; sh "$up" -y -b | grep -q started
-i=0; until grep -q 'flashing\|FAILED' "$dir/t/x28-upgrade.log" 2>/dev/null || [ $i -ge 50 ]; do i=$((i + 1)); sleep 0.1; done
+i=0; until grep -q 'flashing\|FAILED' "$dir/t/x28-upgrade.log" 2>/dev/null || [ $i -ge 5 ]; do i=$((i + 1)); sleep 1; done
 tail -n 1 "$dir/t/x28-upgrade.log" | grep -q 'flashing 0.10.0'
-i=0; while [ -e "$dir/t/x28-upgrade.lock" ] && [ $i -lt 50 ]; do i=$((i + 1)); sleep 0.1; done; [ ! -e "$dir/t/x28-upgrade.lock" ]
+i=0; while [ -e "$dir/t/x28-upgrade.lock" ] && [ $i -lt 5 ]; do i=$((i + 1)); sleep 1; done; [ ! -e "$dir/t/x28-upgrade.lock" ]
 echo "x28-upgrade: ok"
