@@ -95,7 +95,7 @@ jobs:
           # The package files first_boot.py reads (X28_OVERLAY).
           tar -cf - package/luci-proto-x28-mipc package/x28-bootok/files package/x28-dhcp/files package/x28-feed/files package/x28-kmod-stubs/stubs.txt package/x28-kmods/files package/x28-leds/files package/x28-mipc/files package/x28-modem/files package/x28-storage/files package/x28-sysupgrade/files package/x28-wifi/files | tar -xf - -C "$B/overlay"
           # One set of ipks for the image and the signed feed (#419). The x28-* packages need no SDK: built here, byte for byte
-          # what the feed is cut from. The module packages are built locally against the private SDK tree and sit on the
+          # what the feed is cut from, including the current x28-kmods loader. The module packages are built locally against the private SDK tree and sit on the
           # newest feed release, which is updated in place; they are taken from there by the hashes in package/x28-kmods/ipk.sha256,
           # so this job never waits for signing, and a changed file fails here instead of shipping.
           python3 tools/build/release_check.py x28 --out "$B/ipk"

@@ -155,7 +155,7 @@ class Build(unittest.TestCase):
             f.build([], out, [], init)
             index = f.parse_index((out / 'Packages').read_text())
             p = index['x28-kmods']
-            self.assertEqual((p['Version'], p['Architecture'], p['Depends']), (f'{f.VERSION}-r{f.REV}', 'all', f'kernel (= {f.VERSION})'))
+            self.assertEqual((p['Version'], p['Architecture'], p['Depends']), (f'{f.VERSION}-r{f.LOADER_REV}', 'all', f'kernel (= {f.VERSION})'))
             outer = tarfile.open(out / p['Filename'], 'r:gz')
             data = tarfile.open(fileobj=io.BytesIO(outer.extractfile('./data.tar.gz').read()), mode='r:gz')
             member = data.getmember('./etc/init.d/x28-kmods')
