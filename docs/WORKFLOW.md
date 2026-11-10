@@ -30,6 +30,7 @@ develop ──────────────── PR (merge commit) ─�
   back into `develop`'s history, or the next version on `develop` is computed from the wrong base.
 - Branch names: `feature/<issue>-slug`, `fix/<issue>-slug`, `chore/<issue>-slug`, `docs/<issue>-slug`, `research/<issue>-slug`.
 - Keep branches short-lived, rebase on `develop` before opening the PR. No direct pushes to `develop` or `main`.
+- Synchronizing release hotfixes from `main` back into `develop` must preserve the merge ancestry: use a merge commit for that synchronization PR, never squash it. A content-only squash leaves the original conflicts in the later `develop` -> `main` release PR.
 
 ## Releases: automatic, from the PR title
 
