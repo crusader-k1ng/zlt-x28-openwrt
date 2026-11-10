@@ -1,3 +1,7 @@
+import io
+import subprocess
+import sys
+import tarfile
 import pathlib
 import tempfile
 import unittest
@@ -40,6 +44,16 @@ class Compare(unittest.TestCase):
         self.assertEqual(rc.check_pins(self.d, pins), ['missing b.ipk'])
         (self.d / 'a.ipk').write_bytes(b'y')
         self.assertEqual(rc.check_pins(self.d, pins)[0], 'differs from the pin: a.ipk')
+
+    def test_release_builds_current_loader_without_sdk(self):
+        subprocess.run([sys.executable, str(rc.ROOT / 'tools/build/release_check.py'),
+                        'x28', '--out', str(self.d)], check=True, capture_output=True)
+        ipk = self.d / f'x28-kmods_{feed.KERNEL}-r{feed.LOADER_REV}_all.ipk'
+        with tarfile.open(ipk) as outer:
+            with tarfile.open(fileobj=io.BytesIO(outer.extractfile('./data.tar.gz').read())) as data:
+                self.assertEqual(data.extractfile('./etc/init.d/x28-kmods').read(), feed.LOADER.read_bytes())
+        self.assertNotIn('x28-kmods', rc.sdk_built())
+        self.assertGreater(feed.LOADER_REV, 2)
 
     def test_committed_pins_name_every_sdk_built_package(self):
         names = {l.split()[1].split('_')[0] for l in rc.PINS.read_text().splitlines()}

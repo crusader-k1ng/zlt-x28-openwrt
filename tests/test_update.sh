@@ -69,6 +69,16 @@ if sh "$up" --refresh -y >/dev/null 2>&1; then exit 1; fi
 
 upg -y | grep -q 'flashing 0.10.0 to slot b' && [ "$(cat "$dir/calls")" = "-T $dir/t/x28-sysupgrade-0.10.0.tar
 -k -u $dir/t/x28-sysupgrade-0.10.0.tar" ]   # -k: settings and the package list are kept (#477)
+# The default downloader follows redirects, reports HTTP errors and keeps the output-file calling convention.
+mkdir "$dir/bin"
+cat > "$dir/bin/curl" <<'C'
+#!/bin/sh
+[ "$1 $2 $3 $4 $5 $6 $7" = '-fL -sS --connect-timeout 30 --retry 2 -o' ] || exit 2
+shift 7
+exec sh "$D/get" "$@"
+C
+chmod +x "$dir/bin/curl"
+(PATH="$dir/bin:$PATH"; unset X28_UPG_GET; upg -y) | grep -q 'flashing 0.10.0'
 echo 0.10.0 > "$dir/release"; upg -y | grep -q 'up to date' && [ ! -e "$dir/calls" ]; echo 0.9.0 > "$dir/release"
 TRIES=1 upg -y 2>/dev/null | grep -q 'FAILED: the running slot' && [ ! -e "$dir/calls" ]
 SLOT=$((1 << 40)) upg -y | grep -q 'FAILED: /tmp has' && [ ! -e "$dir/calls" ]
