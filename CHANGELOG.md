@@ -6,7 +6,7 @@ milestones below, written by hand, and the full per-release list at the bottom, 
 
 ## Unreleased
 
-Nothing yet.
+- Fix releases shipping the stale slot-A-only module loader: build x28-kmods r3 from current source, restoring Passwall2 transparent proxy on slot B.
 
 ## Milestones
 

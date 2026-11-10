@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """One set of .ipk files per release, used by both the image assembly and the signed feed (#419).
 
-  x28      build the x28-* packages of package/x28-packages.ini (no SDK, CI does this)
-  pin      list the SDK-built packages (module packages and the loader) of a feed dir as `sha256  file` lines
+  x28      build the x28-* packages and current module loader (no SDK, CI does this)
+  pin      list the SDK-built packages (module packages and band tool) of a feed dir as `sha256  file` lines
   fetch    check a dir of those files against the pin list (what release.yml does after downloading them)
   kmods    unpack the .ko files of the module packages for first_boot.py --kmods (until the flasher reads ipks, #420)
   compare  check that a feed index and a dir of ipks hold the same bytes for every package of ours
@@ -24,13 +24,13 @@ PINS = ROOT / 'package/x28-kmods/ipk.sha256'
 
 
 def sdk_built():
-    """Names of the packages built against private vendor files: the module packages, the loader and the band tool."""
+    """Names of the packages built against private vendor files: the module packages and the band tool."""
     names = [l.split('|')[0].split()[0] for l in feed.REAL.read_text().splitlines() if l.strip() and not l.startswith('#')]
-    return names + ['x28-kmods', 'x28-nrband']
+    return names + ['x28-nrband']
 
 
 def ours():
-    return set(sdk_built()) | {p[0] for p in feed.read_packages()}
+    return set(sdk_built()) | {'x28-kmods'} | {p[0] for p in feed.read_packages()}
 
 
 def sha(path):
@@ -113,7 +113,7 @@ def main():
     a = ap.parse_args()
     if a.cmd == 'x28':
         with tempfile.TemporaryDirectory() as t:
-            feed.build([], pathlib.Path(t), packages=feed.read_packages())
+            feed.build([], pathlib.Path(t), loader=feed.LOADER, packages=feed.read_packages())
             a.out.mkdir(parents=True, exist_ok=True)
             names = ours()
             for ipk in pathlib.Path(t).glob('*.ipk'):

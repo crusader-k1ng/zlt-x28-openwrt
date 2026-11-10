@@ -34,6 +34,7 @@ KERNEL = '4.19.205-x28'
 VERSION = '1:' + KERNEL
 # Bump when the content of any package built from real.txt changes: opkg only upgrades to a higher version.
 REV = 2
+LOADER_REV = 3  # The loader changes independently of the kernel modules.
 STUBS = pathlib.Path(__file__).resolve().parents[2] / 'package/x28-kmod-stubs/stubs.txt'
 REAL = STUBS.with_name('real.txt')
 LOADER = pathlib.Path(__file__).resolve().parents[2] / 'package/x28-kmods/files/x28-kmods.init'
@@ -236,7 +237,7 @@ def build(names, out, real=(), loader=None, packages=()):
               files_of(n, m, kmods), 'aarch64_generic') for n, m, kmods, d in real]
     if loader:
         pkgs.append(('x28-kmods', f'kernel (= {VERSION})', 'Loads the modules in /lib/modules/x28 at boot, after the A/B boot counter is reset.',
-                     [('./etc/init.d/x28-kmods', pathlib.Path(loader).read_bytes(), 0o755)], 'all', LOADER_SCRIPTS))
+                     [('./etc/init.d/x28-kmods', pathlib.Path(loader).read_bytes(), 0o755)], 'all', LOADER_SCRIPTS, f'{VERSION}-r{LOADER_REV}'))
     pkgs += list(packages)
     for name, depends, description, *rest in pkgs:
         version = VERSION if not rest else rest[3] if len(rest) > 3 else f'{VERSION}-r{REV}'
