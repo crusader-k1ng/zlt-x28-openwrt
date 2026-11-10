@@ -47,12 +47,22 @@ decide() {
 	echo "$BLUE $b 500"
 }
 
+# ra0 can stay up solely as rai0's helper; only configured, active wireless interfaces count.
+wifi_up() {
+	local iface
+	for iface in $(ubus call network.wireless status 2>/dev/null |
+		jsonfilter -e '@[@.up=true && @.disabled=false].interfaces[*].ifname' 2>/dev/null); do
+		ip link show up dev "$iface" 2>/dev/null | grep -q '^[0-9].*<[^>]*LOWER_UP[>,]' && return 0
+	done
+	return 1
+}
+
 poll() {
 	act=$(at 'AT+COPS?' '+COPS' | awk -F, 'NF>=4{print $4+0}')
 	cesq=$(at 'AT+CESQ' '+CESQ')
 	rsrp=$(echo "$cesq" | cut -d, -f6) ssrsrp=$(echo "$cesq" | cut -d, -f8)
 	wan=0; [ "$(ubus call network.interface.wan status 2>/dev/null | jsonfilter -e '@.up')" = true ] && wan=1
-	wifi=0; ip link show up 2>/dev/null | grep -qE '^[0-9]+: (ra|rai|rax|wlan)[0-9]' && wifi=1
+	wifi=0; wifi_up && wifi=1
 	searching=0
 	[ -z "$act" ] && [ "$(at 'AT+CEREG?' '+CEREG' | cut -d, -f2)" = 2 ] && searching=1
 	decide "$wan" "$wifi" "$rsrp" "$ssrsrp" "$searching" "$act"
