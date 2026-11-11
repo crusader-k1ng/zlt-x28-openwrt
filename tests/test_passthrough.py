@@ -60,13 +60,13 @@ class PassthroughTests(unittest.TestCase):
    root=Path(directory); (root/'calls').touch(); binary=root/'fake'; binary.write_text(FAKE); binary.chmod(0o755)
    for name in ('ip','iptables','ifstatus','jsonfilter','id','sleep'): (root/name).symlink_to(binary)
    env={**os.environ,'PATH':directory+os.pathsep+os.environ['PATH'],'TEST_STATE':directory,**extra}
-   result=subprocess.run(['sh','-c','INCLUDE_ONLY=1 . "$1"; run_dir="$TEST_STATE/run"; pt_run "$2" "$3"','test',str(HELPER),peer,duration],env=env,text=True,capture_output=True)
+   result=subprocess.run(['sh','-c','INCLUDE_ONLY=1 . "$1"; run_dir="$TEST_STATE/run"; pt_run "$2" "$3"','test',str(HELPER),peer,duration],env=env,text=True,capture_output=True,timeout=15)
    calls=[json.loads(line) for line in (root/'calls').read_text().splitlines()]
    states={p.name:p.read_text() for p in root.iterdir() if p.is_file() and not p.is_symlink() and p.name not in ('fake','calls')}
    return result,calls,states,(root/'run').exists()
 
  def test_invalid_inputs_do_not_mutate_network(self):
-  for peer,duration in [('192.168.70.117;reboot','10'),('999.1.2.3','10'),('127.0.0.1','10'),('192.168.70.117','0'),('192.168.70.117','999999999999999999999')]:
+  for peer,duration in [('192.168.70.117;reboot','10'),('999.1.2.3','10'),('192.168.70.117\n192.168.70.118','10'),('192.168.070.117','10'),('127.0.0.1','10'),('192.168.70.117','0'),('192.168.70.117','999999999999999999999')]:
    with self.subTest(peer=peer,duration=duration):
     result,calls,_,locked=self.run_helper(peer,duration)
     self.assertNotEqual(result.returncode,0)

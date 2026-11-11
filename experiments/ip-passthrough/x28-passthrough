@@ -5,7 +5,7 @@
 run_dir=/var/run/x28-passthrough
 
 pt_ipv4() {
- printf '%s\n' "$1" | awk -F. 'NF != 4 {exit 1} {
+ printf '%s\n' "$1" | awk -F. 'NR != 1 || NF != 4 {exit 1} {
   for (i=1;i<=4;i++) if ($i !~ /^[0-9]+$/ || length($i)>3 || $i+0>255 || (length($i)>1 && substr($i,1,1)=="0")) exit 1
   if ($1==0 || $1==127 || $1>=224) exit 1
  }'
