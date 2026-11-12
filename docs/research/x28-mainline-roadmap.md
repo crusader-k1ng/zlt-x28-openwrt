@@ -178,3 +178,9 @@ No build/boot, modem reinitialization, flash write, DT modification, traffic
 benchmark or rollback rehearsal was performed for Linux 6.x. The next safe
 engineering action is milestone 0 and an offline artifact build, not flashing
 or replacing the working installation.
+
+## Preloader reference
+
+The [preloader readiness inventory](preloader-readiness.md) records the source,
+board, toolchain, authentication and independent-recovery prerequisites for a
+future replacement. Keep the existing preloader for the current kernel port.
