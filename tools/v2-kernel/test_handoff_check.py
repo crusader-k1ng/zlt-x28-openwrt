@@ -30,6 +30,12 @@ class HandoffTests(unittest.TestCase):
         self.assertEqual(result["candidate_kernel_reservation_end_exclusive"], "0x42880000")
         self.assertFalse(result["stock_ramdisk_address_conflicts_with_kernel_reservation"])
 
+    def test_external_initrd_conflicts_with_low_ram_hypothesis(self):
+        result = layout(image(), 1, 2048)
+        self.assertTrue(result["external_initrd_outside_low_40m_hypothesis"])
+        self.assertEqual(result["low_40m_end_exclusive"], "0x42800000")
+        self.assertFalse(layout(image(), 0, 2048)["external_initrd_outside_low_40m_hypothesis"])
+
     def test_invalid_image_headers(self):
         for bad in (b"", bytes(64), image(size=0), image(size=63),
                     image(size=0x2800001), image(offset=0x40000),

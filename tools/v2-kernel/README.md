@@ -7,6 +7,8 @@ changes the router. Do not write these files to a slot.
 **Handoff audit:** [LK load/decompression/entry findings](../../docs/research/lk-kernel-handoff.md)
 show that the blanket DT exclusions can collide with LK's reservation checks.
 The current DT remains a static draft, not a container-ready hardware candidate.
+The [follow-up callback audit](../../docs/research/lk-dt-fixups.md) also finds
+missing required DRAM/EMI metadata nodes and an external-initrd caveat to `mem=`.
 
 ## Build and check
 

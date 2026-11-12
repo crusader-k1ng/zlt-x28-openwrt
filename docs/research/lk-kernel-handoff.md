@@ -222,6 +222,13 @@ Additional original-file function offsets may follow the script name;
 this investigation used `0x3868 0x38be 0x1b6de 0x15b96 0x1c8e4 0x3c92`,
 then `0x1056c` and `0xf9f2` for the libfdt copy-size correction.
 
+## Follow-up: final DT callbacks and command-line/memory behavior
+
+The [2026-11-12 fixup audit](lk-dt-fixups.md) identifies mandatory DRAM/EMI
+metadata paths missing from the draft, LK command-line composition, and why
+an external initramfs can be re-added after a Linux `mem=` limit. The current
+DT and external-initramfs components remain unchanged and non-flashable.
+
 ## Remaining gates
 
 - Compatible minimal DT, memory enforcement and the callback's omitted-node

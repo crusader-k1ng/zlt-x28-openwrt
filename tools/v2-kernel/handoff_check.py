@@ -55,6 +55,10 @@ def layout(image, ramdisk_size, page):
         "dt_physical_address_from_tags": hex(dtb),
         "lk_kernel_virtual_mapping": "0x80080000 (not the physical entry address)",
         "candidate_ramdisk_address": hex(ramdisk), "ramdisk_copied_bytes": copied,
+        # ARM64 initrd handling can re-add RAM after mem= removes it; this is not a hard fence.
+        "low_40m_end_exclusive": "0x42800000",
+        "external_initrd_outside_low_40m_hypothesis": bool(
+            copied and (ramdisk < 0x40000000 or ramdisk + copied > 0x42800000)),
         "ramdisk_reserved_bytes": rounded,
         "stock_ramdisk_address_conflicts_with_kernel_reservation": overlap(
             kernel, KERNEL_RESERVATION, 0x41000000, rounded),
@@ -84,7 +88,8 @@ def audit(stock, image, ramdisk):
         "gzip_component_bytes": len(gzip.compress(image, mtime=0)),
         "handoff": "SMC 0x82000115(kernel_physical, dt_physical, 0, 1)",
         "not_verified": ["mblock allocation success", "LK DT/reservation/command-line fixups",
-                         "nonzero external ramdisk path", "secure-monitor entry state",
+                         "nonzero external ramdisk path", "mem= enforcement with initrd remapping",
+                         "secure-monitor entry state",
                          "authentication acceptance", "X28 UART/boot/recovery"],
     })
     return result
