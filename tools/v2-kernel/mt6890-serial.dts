@@ -1,0 +1,82 @@
+// SPDX-License-Identifier: GPL-2.0-only
+/dts-v1/;
+
+// Offline draft, NOT FLASHABLE. Blanket exclusions may trip LK's reservation-overlap checks.
+// See docs/research/lk-kernel-handoff.md; UART gate inheritance is also unproven.
+/ {
+	model = "ZLT X28 serial-only experiment";
+	compatible = "Tozed,X28", "mediatek,mt6890";
+	#address-cells = <2>;
+	#size-cells = <2>;
+	interrupt-parent = <&gic>;
+
+	aliases { serial0 = &uart0; };
+	chosen {
+		stdout-path = "serial0:921600n8";
+		bootargs = "console=ttyS0,921600n8 earlycon keep_bootcon clk_ignore_unused nokaslr maxcpus=1 cpuidle.off=1 rdinit=/init panic=0";
+	};
+
+	// Only observed System RAM without firmware reservations; not the full 1 GiB.
+	// LK looks up /memory by exact path and may replace its reg property.
+	memory {
+		device_type = "memory";
+		reg = <0 0x40000000 0 0x02880000>, <0 0x44000000 0 0x0c000000>;
+	};
+	// Keep excluded RAM protected even if LK expands /memory back to 1 GiB.
+	reserved-memory {
+		#address-cells = <2>;
+		#size-cells = <2>;
+		ranges;
+		excluded-low@42880000 {
+			reg = <0 0x42880000 0 0x01780000>;
+			no-map;
+		};
+		excluded-upper@50000000 {
+			reg = <0 0x50000000 0 0x30000000>;
+			no-map;
+		};
+	};
+
+	cpus {
+		#address-cells = <1>;
+		#size-cells = <0>;
+		cpu@0 {
+			device_type = "cpu";
+			compatible = "arm,cortex-a55";
+			reg = <0>;
+			enable-method = "psci";
+		};
+	};
+	psci {
+		compatible = "arm,psci-0.2";
+		method = "smc";
+	};
+	gic: interrupt-controller@c000000 {
+		compatible = "arm,gic-v3";
+		#interrupt-cells = <3>;
+		#address-cells = <2>;
+		#size-cells = <2>;
+		ranges;
+		#redistributor-regions = <1>;
+		interrupt-controller;
+		reg = <0 0x0c000000 0 0x40000>, <0 0x0c040000 0 0x200000>;
+		interrupts = <1 9 4>;
+	};
+	timer {
+		compatible = "arm,armv8-timer";
+		interrupts = <1 13 4>, <1 14 4>, <1 11 4>, <1 10 4>;
+		clock-frequency = <13000000>;
+	};
+	clk26m: clock-26m {
+		compatible = "fixed-clock";
+		#clock-cells = <0>;
+		clock-frequency = <26000000>;
+	};
+	uart0: serial@11002000 {
+		compatible = "mediatek,mt6577-uart";
+		reg = <0 0x11002000 0 0x1000>;
+		interrupts = <0 109 4>;
+		// Legacy unnamed clock path: leaves the inherited bus gate alone; not a gate driver.
+		clocks = <&clk26m>;
+	};
+};

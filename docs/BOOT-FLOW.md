@@ -346,7 +346,7 @@ not change what LK's drivers read (**inferred**).
 | `0x84003d1e`, `0x84003d2a` | Allocates 1 MiB as `mb_dtb`. When the caller's address argument is set, it panics unless the buffer landed at `0x42f00000`. The header's `dtb_addr` plays no part in this check. |
 | `0x84003d74` | Looks for a `dtbo` partition. The X28 has none, so the next two steps run. |
 | `0x8401dd4a` | Reads the table, looks for entry ID 0, and uses the first entry if none matches. |
-| `0x84003d9e` | Copies `0x80000` bytes to the buffer. |
+| `0x84003d9e` | Opens the selected tree into a buffer with `0x80000` capacity (`fdt_open_into`), copying the source FDT size, not a fixed 512 KiB. |
 | `0x84003fda` onward | Edits the copy, for example `linux,initrd-start` in `/chosen`. |
 
 Version 0 and 1 images use other paths, including a backward search for a tree appended to the kernel. They were not traced further.
@@ -370,7 +370,7 @@ changed properties and nothing removed. The live tree is 131,334 bytes.
 | Decompressed kernel | At most 40 MiB; stock is about 31 MiB (`0x84003e2c`) | **Inferred:** the buffer size chosen when a load address is set |
 | `/chosen` | Must exist; several edits assert on it | Observed |
 | `/memory`, `/reserved-memory` | Should exist; LK looks them up at `0x8401ca74` and `0x8401c7ec` | Lookup observed; the failure paths were not read |
-| Final tree | Should fit 512 KiB with LK's additions | **Inferred** from the copy size |
+| Final tree | Must fit 512 KiB with LK's additions | Capacity argument to the inspected libfdt open/expand path ([#546 correction](research/lk-kernel-handoff.md#ramdisk-and-dt-implications)) |
 
 ### Not known
 

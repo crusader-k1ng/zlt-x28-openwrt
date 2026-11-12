@@ -1,0 +1,13 @@
+#!/bin/sh
+# SPDX-License-Identifier: GPL-2.0-only
+export PATH=/bin
+mount -t proc proc /proc || exec sh
+mount -t sysfs sysfs /sys || exec sh
+printf '\nX28_SERIAL_INITRAMFS_READY\n'
+uname -a
+printf 'RAM-only diagnostics. No storage mounts, modem services or automatic reboot.\n'
+while :; do
+	setsid cttyhack sh
+	printf 'Shell exited; starting another shell without rebooting.\n'
+	sleep 1
+done
